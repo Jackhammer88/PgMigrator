@@ -1,13 +1,18 @@
 namespace PgMigrator
 
 open System
+open System.IO
 
 module PgMigratorMain =
     [<EntryPoint>]
     let main args =
         try
-            // Прочитаем YAML
-            let config = MigrationConfigManager.readConfig "config.yaml"
+            let configFile =
+                if args.Length = 0 || not (File.Exists args.[0]) then "config.yaml"
+                else args.[0]
+                
+            // Читаем конфигурацию
+            let config = MigrationConfigManager.readConfig configFile
 
             let tables = PgsqlTableManager.getTablesInfo config.SourceCs
             
