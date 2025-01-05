@@ -11,6 +11,7 @@ module DbTypes =
             "real"
             "double precision"
             "numeric"
+            "numeric"
             "decimal"
 
             // Символьные

@@ -8,13 +8,16 @@
     <ItemGroup>
         <Compile Include="DbInfoTypes.fs" />
         <Compile Include="DbTypes.fs" />
-        <Compile Include="ConfigParser.fs" />
-        <Compile Include="PgsqlTableManager.fs" />
+        <Compile Include="MigrationConfigManager.fs" />
+        <Compile Include="DbTableManager.fs" />
+        <Compile Include="DbSchemaGenerator.fs" />
+        <Compile Include="CommandLineParser.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 
     <ItemGroup>
       <PackageReference Include="Dapper" Version="2.1.35" />
+      <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
       <PackageReference Include="Npgsql" Version="8.0.6" />
       <PackageReference Include="YamlDotNet" Version="16.3.0" />
     </ItemGroup>
