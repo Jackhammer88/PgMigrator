@@ -100,6 +100,7 @@ module DbTypes =
             // Символьные
             "char"
             "varchar"
+            "varchar(max)"
             "text"
             "nchar"
             "nvarchar"

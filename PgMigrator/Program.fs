@@ -1,7 +1,7 @@
 namespace PgMigrator
 
 open System
-open DbInfoTypes
+open System.Diagnostics
 
 module PgMigratorMain =
     [<EntryPoint>]
@@ -26,13 +26,27 @@ module PgMigratorMain =
                             String.Equals(ct, t.TableName, StringComparison.InvariantCultureIgnoreCase)))
                     |> Seq.toList
 
-            if sortedFilteredTables.Length > 0 then
-                printf "Selected tables:\n"
-
-                sortedFilteredTables |> Seq.iter (fun t -> printfn $"%s{t.TableName}")
+            if sortedFilteredTables.Length > 0 then                
+                let stopwatch = Stopwatch.StartNew()
                 
                 let schema = DbSchemaGenerator.generatePgSchema sortedFilteredTables config
-                printf $"%s{schema}"
+                //printfn $"%s{schema}"
+                TargetDbScriptRunner.runScript config.TargetCs schema
+                //
+                // sortedFilteredTables
+                // |> Seq.iter (fun t ->
+                //     printfn $"Migrating table: %s{t.TableName}"
+                //     SourceDataProvider.migrateTable config.SourceCs config.TargetCs config.SourceType t.TableName
+                //     )
+                
+                //
+                sortedFilteredTables
+                |> Seq.iter (fun t ->
+                    printfn $"Migrating table: %s{t.TableName}"
+                    SourceDataProvider.migrateTable' config t.TableName
+                    )
+                
+                printfn $"{stopwatch.Elapsed.TotalSeconds} seconds"
                 0
             else
                 printf "No selected tables."

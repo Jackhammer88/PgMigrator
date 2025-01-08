@@ -11,6 +11,10 @@
         <Compile Include="MigrationConfigManager.fs" />
         <Compile Include="DbTableManager.fs" />
         <Compile Include="DbSchemaGenerator.fs" />
+        <Compile Include="TargetDbScriptRunner.fs" />
+        <Compile Include="SourceDataReader.fs" />
+        <Compile Include="TargetDataMapper.fs" />
+        <Compile Include="SourceDataProvider.fs" />
         <Compile Include="CommandLineParser.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>

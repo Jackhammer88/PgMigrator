@@ -4,7 +4,6 @@ open System
 open System.Collections.Generic
 open System.IO
 open System.Text.RegularExpressions
-open DbInfoTypes
 open YamlDotNet.Serialization
 
 type Mapping() =

@@ -3,7 +3,6 @@ namespace PgMigrator
 open Dapper
 open Microsoft.Data.SqlClient
 open Npgsql
-open DbInfoTypes
 
 module DbTableManager =
     let processDbTablesInfo (tables: List<ColumnInfo>) : List<TableInfo> =

@@ -1,4 +1,4 @@
-﻿module DbInfoTypes
+﻿namespace PgMigrator
 
 type ColumnInfo() =
     member val TableName: string = "" with get, set
