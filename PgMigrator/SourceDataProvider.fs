@@ -1,10 +1,11 @@
 namespace PgMigrator
 
-open System
 open System.Data
 open Microsoft.Data.SqlClient
 open Npgsql
 open NpgsqlTypes
+open PgMigrator.Config
+open PgMigrator.Mapping
 
 module SourceDataProvider =
     let getSourceConnection (cs: string) (sourceType: string) : IDbConnection =
@@ -13,122 +14,110 @@ module SourceDataProvider =
         | SourceTypes.mssql -> new SqlConnection(cs)
         | _ -> failwith "Unknown source type"
 
-    let migrateTable sourceCs targetCs sourceType tableName =
-        use sourceConnection = getSourceConnection sourceCs sourceType
-        use targetConnection = new NpgsqlConnection(targetCs) // целевая БД: Postgres
-        sourceConnection.Open()
-        targetConnection.Open()
+    let private mapNameToPgType columnNumber columnName typeName typeMappings =
+        let targetTypeName =
+            DbTypeMapper.getTargetTypeName typeName typeMappings
 
-        // Выполним SELECT * из исходной БД
-        use selectCommand = sourceConnection.CreateCommand()
-        selectCommand.CommandText <- $"SELECT * FROM {tableName}"
-
-        // Считаем структуру — т.е. сколько колонок, какие имена
-        use reader = selectCommand.ExecuteReader()
-
-        // Для каждой строки будем формировать INSERT
-        while reader.Read() do
-            // 1) Собираем список (columnName, value)
-            let columnCount = reader.FieldCount
-
-            let columns =
-                [ for i in 0 .. columnCount - 1 ->
-                      let name = reader.GetName(i)
-                      let value = reader.GetValue(i)
-                      (name, value) ]
-
-            // 2) Сформируем список имён колонок и имён параметров
-            //    Пример: col1, col2, col3  и  @col1, @col2, @col3
-            let columnNames = columns |> List.map fst |> String.concat ", "
-
-            let paramNames =
-                columns |> List.map (fun (colName, _) -> "@" + colName) |> String.concat ", "
-
-            // 3) Сформируем текст INSERT
-            let insertSql = $"INSERT INTO {tableName} ({columnNames}) VALUES ({paramNames})"
-
-            // 4) Создадим команду для целевой БД
-            use insertCommand = targetConnection.CreateCommand()
-            insertCommand.CommandText <- insertSql
-
-            // 5) Добавим параметры
-            for colName, colValue in columns do
-                let p = insertCommand.CreateParameter()
-                p.ParameterName <- "@" + colName
-                p.Value <- if isNull colValue then box DBNull.Value else colValue
-                insertCommand.Parameters.Add(p) |> ignore
-
-            // 6) Выполним вставку
-            insertCommand.ExecuteNonQuery() |> ignore
-
-        ()
-
-    let private mapNameToPgType columnNumber columnName typeName typeMappingsSet =
-        let targetType = TargetDataMapper.convertType typeName typeMappingsSet
+        let targetType = DbTypeMapper.getNpgsqlDbType targetTypeName
         (columnNumber, columnName, typeName, targetType)
 
-    let private writeRowData (writer : NpgsqlBinaryImporter) columnNames sourceReader sourceType =
+    let private writeRowData (writer: NpgsqlBinaryImporter) columnNames sourceReader needSanitizeStrings =
         writer.StartRow()
+
         for c in columnNames do
-            let (number, _, sourceTypeName, targetType : NpgsqlDbType) = c
+            let (number, _, _, targetType: NpgsqlDbType) = c
+
             let columnValue =
-                match SourceDataReader.readSourceRecordValue sourceType sourceReader number sourceTypeName
-                with
+                match SourceDataReader.readSourceRecordValue sourceReader number with
                 | Some v -> v
                 | None -> null
-                
-            writer.Write(columnValue, targetType)
 
-    
-    let migrateTable' (config: MigrationConfig) tableName =
+            let sanitizedValue =
+                match columnValue with
+                | :? string as str when
+                    needSanitizeStrings
+                    && not (System.String.IsNullOrEmpty str)
+                    && targetType = NpgsqlDbType.Varchar
+                    ->
+                    str.Replace("\u0000", "") :> obj
+                | _ -> columnValue
+
+            writer.Write(sanitizedValue, targetType)
+
+
+    let escapeTableName sourceType tableName =
+        match sourceType with
+        | SourceTypes.mssql -> $"[{tableName}]"
+        | SourceTypes.postgres -> $"\"{tableName}\""
+        | s -> failwithf $"Unknown source type {s}"
+
+
+    let escapeColumnName (columnName: string) =
+        match columnName.ToLowerInvariant() with
+        | s when s = "date" || s = "user" || s = "order" -> $"\"{s}\""
+        | _ -> columnName
+
+    let addSchemaName schema tableName =
+        match schema with
+        | Some s -> $"{s}.{tableName}"
+        | None -> tableName
+
+    let migrateTable
+        (srcCon: IDbConnection)
+        (targetCon: NpgsqlConnection)
+        (config: MigrationConfig)
+        tableName
+        (typeMappings: Map<string, TypeMapping>)
+        =
         let tableMappingsSet =
-            config.TableMappings |> Seq.map (fun m -> m.Old, m.New) |> Map.ofSeq
-
-        let typeMappingsSet =
-            config.TypeMappings |> Seq.map (fun m -> m.Old, m.New) |> Map.ofSeq
-
-        use sourceConnection = getSourceConnection config.SourceCs config.SourceType
-        use targetConnection = new NpgsqlConnection(config.TargetCs) // целевая БД: Postgres
-        sourceConnection.Open()
-        targetConnection.Open()
+            config.TableMappings
+            |> List.map (fun mapping -> mapping.Old, mapping) // Создаем пары (Old, TableMapping)
+            |> Map.ofList
 
         // Выполним SELECT * из исходной БД
-        use selectCommand = sourceConnection.CreateCommand()
-        selectCommand.CommandText <- $"SELECT * FROM {tableName}"
+        use selectCommand = srcCon.CreateCommand()
+
+        let escapedTableName =
+            tableName
+            |> escapeTableName config.SourceType
+            |> addSchemaName config.SourceSchema
+
+        selectCommand.CommandText <- $"SELECT * FROM {escapedTableName}"
         use sourceReader = selectCommand.ExecuteReader()
 
         // Если записи существуют, то мигрируем
-        if sourceReader.Read() && sourceReader.FieldCount > 0 then
+        if sourceReader.FieldCount > 0 then
             // Получаем имена и типы столбцов исходной таблицы
             let columnsCount = sourceReader.FieldCount
+
             let columnNames =
                 [ for i in 0 .. columnsCount - 1 do
                       let columnName = sourceReader.GetName(i)
                       let columnTypeName = sourceReader.GetDataTypeName(i)
-                      yield mapNameToPgType i columnName columnTypeName typeMappingsSet ]
-            
+                      yield mapNameToPgType i columnName columnTypeName typeMappings ]
+
             // Если требуется, преобразуем имя целевой таблицы
-            let targetDbName =
+            let schema = config.TargetSchema |> Option.defaultValue "public"
+
+            let targetTableName =
                 match tableMappingsSet.TryGetValue tableName with
-                | s, nName when s -> nName
-                | _ -> tableName
+                | s, m when s -> $"{schema}.{m.New}"
+                | _ -> $"{schema}.{tableName}"
 
             // Форматируем строку с именами столбцов для вставки
             let columnNamesString =
                 columnNames
-                |> List.map (fun (_, name, _, _) -> name)
+                |> List.map (fun (_, name, _, _) -> escapeColumnName name)
                 |> String.concat ", "
 
             use writer =
-                targetConnection.BeginBinaryImport(
-                    $"COPY {targetDbName} ({columnNamesString}) FROM STDIN (FORMAT BINARY)")
-            
-            // Записываем первую строку
-            writeRowData writer columnNames sourceReader config.SourceType
+                targetCon.BeginBinaryImport($"COPY {targetTableName} ({columnNamesString}) FROM STDIN (FORMAT BINARY)")
+
+            let needRemoveNullBytes = config.RemoveNullBytes |> Option.defaultValue false
 
             // Записываем оставшиеся строки
             while sourceReader.Read() do
-                writeRowData writer columnNames sourceReader config.SourceType
+                writeRowData writer columnNames sourceReader needRemoveNullBytes
 
             writer.Complete() |> ignore
             ()

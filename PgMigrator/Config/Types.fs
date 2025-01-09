@@ -1,0 +1,63 @@
+namespace PgMigrator.Config
+
+open YamlDotNet.Serialization
+
+[<CLIMutable>]
+type TableMapping = {
+    [<YamlMember(Alias = "Old")>]
+    Old: string
+    
+    [<YamlMember(Alias = "New")>]
+    New: string
+}
+
+[<CLIMutable>]
+type TypeInfo = {
+    [<YamlMember(Alias = "Type")>]
+    Type: string
+    
+    [<YamlMember(Alias = "Param")>]
+    Param: Option<string>
+}
+
+[<CLIMutable>]
+type TypeMapping = {
+    [<YamlMember(Alias = "Old")>]
+    Old: TypeInfo
+    
+    [<YamlMember(Alias = "New")>]
+    New: TypeInfo
+    
+    [<YamlMember(Alias = "TransferParam")>]
+    TransferParam: bool
+}
+
+[<CLIMutable>]
+type MigrationConfig = {
+      [<YamlMember(Alias = "SourceCs")>]
+      SourceCs: string
+      
+      [<YamlMember(Alias = "TargetCs")>]
+      TargetCs: string
+      
+      [<YamlMember(Alias = "SourceSchema")>]
+      SourceSchema: string option
+      
+      [<YamlMember(Alias = "TargetSchema")>]
+      TargetSchema: string option
+      
+      [<YamlMember(Alias = "RemoveNullBytes")>]
+      RemoveNullBytes: bool option
+      
+      [<YamlMember(Alias = "SourceType")>]
+      SourceType: string
+      
+      [<YamlMember(Alias = "Tables")>]
+      Tables: string list
+      
+      [<YamlMember(Alias = "TypeMappings")>]
+      TypeMappings: TypeMapping list
+      
+      [<YamlMember(Alias = "TableMappings")>]
+      TableMappings: TableMapping list
+    }

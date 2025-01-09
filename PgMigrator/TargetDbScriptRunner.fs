@@ -1,13 +1,12 @@
 namespace PgMigrator
 
-open Npgsql
+open System.Data
 
 module TargetDbScriptRunner =
-    let runScript cs script =
-        use targetConnection = new NpgsqlConnection(cs)
-        targetConnection.Open()
-        use command = targetConnection.CreateCommand()
+    let run (connection: IDbConnection) (transaction : IDbTransaction) script =
+        use command = connection.CreateCommand()
         command.CommandText <- script
+        command.Transaction <- transaction
         command.ExecuteNonQuery() |> ignore
         ()
 

@@ -4,7 +4,7 @@ open Dapper
 open Microsoft.Data.SqlClient
 open Npgsql
 
-module DbTableManager =
+module TableManager =
     let processDbTablesInfo (tables: List<ColumnInfo>) : List<TableInfo> =
             tables
             |> Seq.groupBy _.TableName
@@ -20,11 +20,16 @@ module DbTableManager =
                 })
             |> Seq.toList
         
-    let getPostgresTablesInfo (cs: string) : List<TableInfo> =
+    let getPostgresTablesInfo (cs: string) schema : List<TableInfo> =
+        let schemaCondition =
+            match schema with
+            | Some s -> $"AND t.table_schema = '{s}'"
+            | None -> "AND t.table_schema NOT IN ('pg_catalog', 'information_schema')"
+            
         use connection = new NpgsqlConnection(cs)
 
         let query =
-            """SELECT
+            $"""SELECT
         t.table_name AS TableName,
         c.column_name AS ColumnName,
         CASE 
@@ -67,7 +72,7 @@ module DbTableManager =
         )
     WHERE 
         t.table_type = 'BASE TABLE'
-        AND t.table_schema NOT IN ('pg_catalog', 'information_schema')
+        {schemaCondition}
     ORDER BY 
         t.table_schema, t.table_name, c.ordinal_position;
             """
@@ -75,9 +80,14 @@ module DbTableManager =
         |> Seq.toList
         |> processDbTablesInfo
         
-    let getMssqlTablesInfo (cs: string) : List<TableInfo> =
+    let getMssqlTablesInfo (cs: string) schema : List<TableInfo> =
+        let schemaCondition =
+            match schema with
+            | Some s -> $"AND t.TABLE_SCHEMA = '{s}'"
+            | None -> "AND t.TABLE_SCHEMA NOT IN ('sys', 'information_schema')"
+            
         use connection = new SqlConnection(cs)
-        let query = """
+        let query = $"""
         SELECT 
     t.TABLE_NAME AS TableName,
     c.COLUMN_NAME AS ColumnName,
@@ -126,7 +136,7 @@ ON
     )
 WHERE 
     t.TABLE_TYPE = 'BASE TABLE'
-    AND t.TABLE_SCHEMA NOT IN ('sys', 'information_schema')
+    {schemaCondition}
 ORDER BY 
     t.TABLE_SCHEMA, t.TABLE_NAME, c.ORDINAL_POSITION;
 """
@@ -134,8 +144,8 @@ ORDER BY
             |> Seq.toList
             |> processDbTablesInfo
         
-    let getTablesInfo (cs: string) (sourceType: string) : List<TableInfo> =
+    let getTablesInfo (cs : string) (sourceType :string) schema=
         match sourceType.ToLowerInvariant() with
-        | SourceTypes.postgres -> getPostgresTablesInfo cs
-        | SourceTypes.mssql -> getMssqlTablesInfo cs
+        | SourceTypes.postgres -> getPostgresTablesInfo cs schema
+        | SourceTypes.mssql -> getMssqlTablesInfo cs schema
         | _ -> failwithf $"Wrong db type: %s{sourceType}"

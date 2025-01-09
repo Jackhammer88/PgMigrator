@@ -2,6 +2,7 @@ namespace PgMigrator
 
 open System
 open System.IO
+open PgMigrator.Config
 
 module CommandLineParser =
     let private printHelp () =
@@ -24,10 +25,10 @@ Options:
         match args |> Array.toList with
         | [] -> ()
         | [ "--generate-config"; folder ] ->
-            MigrationConfigManager.createDefaultConfig folder
+            ConfigManager.createDefaultConfig folder
             Environment.Exit(0)
         | [ "-g"; folder ] ->
-            MigrationConfigManager.createDefaultConfig folder
+            ConfigManager.createDefaultConfig folder
             Environment.Exit(0)
         | [ "--help" ]
         | [ "-h" ] ->
@@ -35,7 +36,7 @@ Options:
             Environment.Exit(0)
         | [ "--generate-config" ]
         | [ "-g" ] ->
-            MigrationConfigManager.createDefaultConfig ""
+            ConfigManager.createDefaultConfig ""
             printHelp ()
             Environment.Exit(0)
         | _ -> ()
