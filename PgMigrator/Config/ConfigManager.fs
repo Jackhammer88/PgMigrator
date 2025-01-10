@@ -2,7 +2,7 @@ namespace PgMigrator.Config
 
 open System
 open System.IO
-open PgMigrator
+open PgMigrator.Types
 open YamlDotNet.Serialization
 
 module ConfigManager =

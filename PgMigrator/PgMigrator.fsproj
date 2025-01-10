@@ -6,7 +6,10 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="DbInfoTypes.fs" />
+        <Compile Include="Types\ColumnInfo.fs" />
+        <Compile Include="Types\ConnectionsInfo.fs" />
+        <Compile Include="Types\TableInfo.fs" />
+        <Compile Include="Types\SourceTypes.fs" />
         <Compile Include="Config\Types.fs" />
         <Compile Include="Config\ConfigManager.fs" />
         <Compile Include="Mapping\DbTypeDefaultMappings.fs" />

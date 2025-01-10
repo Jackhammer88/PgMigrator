@@ -3,29 +3,24 @@ namespace PgMigrator
 open Dapper
 open Microsoft.Data.SqlClient
 open Npgsql
+open PgMigrator.Types
 
 module TableManager =
     let processDbTablesInfo (tables: List<ColumnInfo>) : List<TableInfo> =
-            tables
-            |> Seq.groupBy _.TableName
-            |> Seq.map (fun (tableName, columns) ->
-                {
-                    TableName = tableName
-                    Columns =
-                        columns
-                        |> Seq.toList
-                    PkCount =
-                        columns
-                        |> Seq.filter _.IsPrimaryKey |> Seq.length
-                })
-            |> Seq.toList
-        
-    let getPostgresTablesInfo (cs: string) schema : List<TableInfo> =
+        tables
+        |> Seq.groupBy _.TableName
+        |> Seq.map (fun (tableName, columns) ->
+            { TableName = tableName
+              Columns = columns |> Seq.toList
+              PkCount = columns |> Seq.filter _.IsPrimaryKey |> Seq.length })
+        |> Seq.toList
+
+    let getPostgresTablesInfo cs schema : List<TableInfo> =
         let schemaCondition =
             match schema with
             | Some s -> $"AND t.table_schema = '{s}'"
             | None -> "AND t.table_schema NOT IN ('pg_catalog', 'information_schema')"
-            
+
         use connection = new NpgsqlConnection(cs)
 
         let query =
@@ -76,18 +71,21 @@ module TableManager =
     ORDER BY 
         t.table_schema, t.table_name, c.ordinal_position;
             """
+
         connection.Query<ColumnInfo>(query).AsList()
         |> Seq.toList
         |> processDbTablesInfo
-        
-    let getMssqlTablesInfo (cs: string) schema : List<TableInfo> =
+
+    let getMssqlTablesInfo cs schema : List<TableInfo> =
         let schemaCondition =
             match schema with
             | Some s -> $"AND t.TABLE_SCHEMA = '{s}'"
             | None -> "AND t.TABLE_SCHEMA NOT IN ('sys', 'information_schema')"
-            
+
         use connection = new SqlConnection(cs)
-        let query = $"""
+
+        let query =
+            $"""
         SELECT 
     t.TABLE_NAME AS TableName,
     c.COLUMN_NAME AS ColumnName,
@@ -140,11 +138,12 @@ WHERE
 ORDER BY 
     t.TABLE_SCHEMA, t.TABLE_NAME, c.ORDINAL_POSITION;
 """
+
         connection.Query<ColumnInfo>(query).AsList()
-            |> Seq.toList
-            |> processDbTablesInfo
-        
-    let getTablesInfo (cs : string) (sourceType :string) schema=
+        |> Seq.toList
+        |> processDbTablesInfo
+
+    let getTablesInfo (cs: string) (sourceType: string) schema =
         match sourceType.ToLowerInvariant() with
         | SourceTypes.postgres -> getPostgresTablesInfo cs schema
         | SourceTypes.mssql -> getMssqlTablesInfo cs schema

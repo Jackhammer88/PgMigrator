@@ -2,6 +2,7 @@ namespace PgMigrator
 
 open PgMigrator.Config
 open PgMigrator.Mapping
+open PgMigrator.Types
 
 module SchemaGenerator =                      
     let private escapePgTableName name =

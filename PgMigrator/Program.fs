@@ -6,9 +6,10 @@ open Npgsql
 open PgMigrator.Config
 open PgMigrator.Mapping
 open FsToolkit.ErrorHandling
+open PgMigrator.Types
 
 module PgMigratorMain =
-    let generateTypeMappings (userTypeMappings : TypeMapping list) sourceType =
+    let generateTypeMappings userTypeMappings sourceType =
         let userMappings = 
             userTypeMappings
             |> List.map (fun m -> 
@@ -89,7 +90,7 @@ module PgMigratorMain =
                     // Мигация таблиц
                     do! SourceDataProvider.migrateAllTablesAsync filteredTable connectionsInfo config typeMappings
                         |> Async.RunSynchronously
-                        |> Seq.filter (_.IsError)
+                        |> Seq.filter _.IsError
                         |> Seq.tryPick (function
                             | Error e -> Some (Error e) // Возвращаем ошибку, если она есть
                             | Ok _ -> None) // Пропускаем успешные результаты

@@ -6,6 +6,7 @@ open Npgsql
 open NpgsqlTypes
 open PgMigrator.Config
 open PgMigrator.Mapping
+open PgMigrator.Types
 
 module SourceDataProvider =
     let getSourceConnection (cs: string) (sourceType: string) : IDbConnection =
@@ -24,7 +25,7 @@ module SourceDataProvider =
         task {
             do! writer.StartRowAsync()
 
-            for (n, _, _, t) in columnNames do
+            for n, _, _, t in columnNames do
                 let value =
                     match SourceDataReader.readSourceRecordValue sourceReader n with
                     | Some v ->

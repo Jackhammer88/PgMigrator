@@ -1,5 +1,7 @@
 namespace PgMigrator
 
+open PgMigrator.Types
+
 module TargetDbScriptRunner =
     let tryRun connectionsInfo script =
         try
