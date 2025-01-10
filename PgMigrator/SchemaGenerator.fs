@@ -51,7 +51,7 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
         | None -> script
         
     
-    let generatePgSchemaScript (tables: List<TableInfo>) (config: MigrationConfig) (typeMappings : Map<string,TypeMapping>) : string =
+    let makeSchemaScript (tables: List<TableInfo>) (config: MigrationConfig) (typeMappings : Map<string,TypeMapping>) : string =
         let tableMap =
             config.TableMappings
             |> List.map (fun m -> m.Old, m)

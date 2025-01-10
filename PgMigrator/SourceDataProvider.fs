@@ -15,35 +15,31 @@ module SourceDataProvider =
         | _ -> failwith "Unknown source type"
 
     let private mapNameToPgType columnNumber columnName typeName typeMappings =
-        let targetTypeName =
-            DbTypeMapper.getTargetTypeName typeName typeMappings
+        let targetTypeName = DbTypeMapper.getTargetTypeName typeName typeMappings
 
         let targetType = DbTypeMapper.getNpgsqlDbType targetTypeName
         (columnNumber, columnName, typeName, targetType)
 
-    let private writeRowData (writer: NpgsqlBinaryImporter) columnNames sourceReader needSanitizeStrings =
-        writer.StartRow()
+    let private writeRowDataAsync (writer: NpgsqlBinaryImporter) columnNames sourceReader needSanitizeStrings =
+        task {
+            do! writer.StartRowAsync()
 
-        for c in columnNames do
-            let (number, _, _, targetType: NpgsqlDbType) = c
+            for (n, _, _, t) in columnNames do
+                let value =
+                    match SourceDataReader.readSourceRecordValue sourceReader n with
+                    | Some v ->
+                        match v with
+                        | :? string as str when
+                            needSanitizeStrings
+                            && not (System.String.IsNullOrEmpty str)
+                            && t = NpgsqlDbType.Varchar
+                            ->
+                            str.Replace("\u0000", "") :> obj
+                        | _ -> v
+                    | None -> null
 
-            let columnValue =
-                match SourceDataReader.readSourceRecordValue sourceReader number with
-                | Some v -> v
-                | None -> null
-
-            let sanitizedValue =
-                match columnValue with
-                | :? string as str when
-                    needSanitizeStrings
-                    && not (System.String.IsNullOrEmpty str)
-                    && targetType = NpgsqlDbType.Varchar
-                    ->
-                    str.Replace("\u0000", "") :> obj
-                | _ -> columnValue
-
-            writer.Write(sanitizedValue, targetType)
-
+                do! writer.WriteAsync(value, t)
+        }
 
     let escapeTableName sourceType tableName =
         match sourceType with
@@ -62,64 +58,76 @@ module SourceDataProvider =
         | Some s -> $"{s}.{tableName}"
         | None -> tableName
 
-    let migrateTable
+    let migrateTableAsync
         (srcCon: IDbConnection)
         (targetCon: NpgsqlConnection)
         (config: MigrationConfig)
         tableName
         (typeMappings: Map<string, TypeMapping>)
         =
-        let tableMappingsSet =
-            config.TableMappings
-            |> List.map (fun mapping -> mapping.Old, mapping) // Создаем пары (Old, TableMapping)
-            |> Map.ofList
+        async {
+            try
+                printfn $"Migrating table: %s{tableName}"
 
-        // Выполним SELECT * из исходной БД
-        use selectCommand = srcCon.CreateCommand()
+                let tableMappingsSet =
+                    config.TableMappings
+                    |> List.map (fun mapping -> mapping.Old, mapping) // Создаем пары (Old, TableMapping)
+                    |> Map.ofList
 
-        let escapedTableName =
-            tableName
-            |> escapeTableName config.SourceType
-            |> addSchemaName config.SourceSchema
+                let needRemoveNullBytes = config.RemoveNullBytes |> Option.defaultValue false
 
-        selectCommand.CommandText <- $"SELECT * FROM {escapedTableName}"
-        use sourceReader = selectCommand.ExecuteReader()
+                let escapedTableName =
+                    tableName
+                    |> escapeTableName config.SourceType
+                    |> addSchemaName config.SourceSchema
 
-        // Если записи существуют, то мигрируем
-        if sourceReader.FieldCount > 0 then
-            // Получаем имена и типы столбцов исходной таблицы
-            let columnsCount = sourceReader.FieldCount
+                // Выполним SELECT * из исходной БД
+                use selectCommand = srcCon.CreateCommand()
 
-            let columnNames =
-                [ for i in 0 .. columnsCount - 1 do
-                      let columnName = sourceReader.GetName(i)
-                      let columnTypeName = sourceReader.GetDataTypeName(i)
-                      yield mapNameToPgType i columnName columnTypeName typeMappings ]
+                selectCommand.CommandText <- $"SELECT * FROM {escapedTableName}"
+                use sourceReader = selectCommand.ExecuteReader()
 
-            // Если требуется, преобразуем имя целевой таблицы
-            let schema = config.TargetSchema |> Option.defaultValue "public"
+                // Получаем имена и типы столбцов исходной таблицы
+                let columnsCount = sourceReader.FieldCount
 
-            let targetTableName =
-                match tableMappingsSet.TryGetValue tableName with
-                | s, m when s -> $"{schema}.{m.New}"
-                | _ -> $"{schema}.{tableName}"
+                let columnNames =
+                    [ for i in 0 .. columnsCount - 1 do
+                          let columnName = sourceReader.GetName(i)
+                          let columnTypeName = sourceReader.GetDataTypeName(i)
+                          yield mapNameToPgType i columnName columnTypeName typeMappings ]
 
-            // Форматируем строку с именами столбцов для вставки
-            let columnNamesString =
-                columnNames
-                |> List.map (fun (_, name, _, _) -> escapeColumnName name)
-                |> String.concat ", "
+                // Если требуется, преобразуем имя целевой схемы
+                let schema = config.TargetSchema |> Option.defaultValue "public"
 
-            use writer =
-                targetCon.BeginBinaryImport($"COPY {targetTableName} ({columnNamesString}) FROM STDIN (FORMAT BINARY)")
+                let targetTableName =
+                    match tableMappingsSet.TryGetValue tableName with
+                    | s, m when s -> $"{schema}.{m.New}"
+                    | _ -> $"{schema}.{tableName}"
 
-            let needRemoveNullBytes = config.RemoveNullBytes |> Option.defaultValue false
+                // Форматируем строку с именами столбцов для вставки
+                let columnNamesString =
+                    columnNames
+                    |> List.map (fun (_, name, _, _) -> escapeColumnName name)
+                    |> String.concat ", "
 
-            // Записываем оставшиеся строки
-            while sourceReader.Read() do
-                writeRowData writer columnNames sourceReader needRemoveNullBytes
+                use writer =
+                    targetCon.BeginBinaryImport(
+                        $"COPY {targetTableName} ({columnNamesString}) FROM STDIN (FORMAT BINARY)")
 
-            writer.Complete() |> ignore
-            ()
-        else
-            ()
+                // Записываем все строки
+                while sourceReader.Read() && sourceReader.FieldCount > 0 do
+                    do! writeRowDataAsync writer columnNames sourceReader needRemoveNullBytes
+                        |> Async.AwaitTask
+
+                do! writer.CompleteAsync().AsTask() |> Async.AwaitTask |> Async.Ignore
+
+                return Ok()
+            with ex ->
+                return Error ex.Message
+        }
+
+    let migrateAllTablesAsync tables connectionsInfo config typeMappings =
+        tables
+        |> List.map (fun t ->
+            migrateTableAsync connectionsInfo.Source connectionsInfo.Target config t.TableName typeMappings)
+        |> Async.Sequential
