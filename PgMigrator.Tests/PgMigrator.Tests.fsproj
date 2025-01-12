@@ -11,6 +11,7 @@
     <ItemGroup>
         <Compile Include="DbTypeMapperTests.fs" />
         <Compile Include="DbTypeMapperGetNpgsqlDbTypeTests.fs" />
+        <Compile Include="TableMigratorTests.fs" />
         <Compile Include="Program.fs"/>
     </ItemGroup>
 
