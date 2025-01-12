@@ -61,7 +61,7 @@ type MigrationConfig = {
       [<YamlMember(Alias = "TableMappings")>]
       TableMappings: TableMapping list
     } with
-        member this.getSourceType =
+        member internal this.getSourceType =
             match this.SourceTypeName with
             | SourceTypes.mssql -> Mssql
             | SourceTypes.postgres -> Pgsql
