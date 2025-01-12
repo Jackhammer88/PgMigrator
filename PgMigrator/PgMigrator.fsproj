@@ -19,8 +19,7 @@
         <Compile Include="DataProviders\PgsqlProvider.fs" />
         <Compile Include="PgSession.fs" />
         <Compile Include="SchemaGenerator.fs" />
-        <Compile Include="SourceDataReader.fs" />
-        <Compile Include="SourceDataProvider.fs" />
+        <Compile Include="TableMigrator.fs" />
         <Compile Include="CommandLineParser.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>

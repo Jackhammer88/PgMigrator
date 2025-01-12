@@ -2,9 +2,7 @@ namespace PgMigrator
 
 open System
 open System.Diagnostics
-open FsToolkit.ErrorHandling.Operator.Result
 open Microsoft.FSharp.Core
-open Npgsql
 open PgMigrator.Config
 open PgMigrator.DataProviders
 open PgMigrator.Mapping
@@ -72,6 +70,7 @@ module PgMigratorMain =
                 
                  // Получение информации о таблицах источника
                 let! dbTables = sourceProvider.tryGetTablesInfo() |> Async.RunSynchronously
+                
                 // Фильтрация по выбранным таблицам
                 let filteredTable = filterTables config.Tables dbTables
                 do! match filteredTable.Length with
@@ -83,17 +82,10 @@ module PgMigratorMain =
                 use! pgSession = PgSessionFactory.tryCreateAsync targetCs |> Async.RunSynchronously
                 do! pgSession.tryRunQuery script |> Async.RunSynchronously
                 
-                // Мигация таблиц
-                let t = filteredTable |> List.map _.TableName
-                do! SourceDataProvider.migrateAllTablesAsync t sourceProvider pgSession config typeMappings
+                // Миграция таблиц
+                let tableNames = filteredTable |> List.map _.TableName
+                do! TableMigrator.tryMigrateAllTablesAsync sourceProvider pgSession targetSchema tableNames tableMappings typeMappings
                     |> Async.RunSynchronously
-                    |> Seq.filter _.IsError
-                    |> Seq.tryPick (function
-                        | Error e -> Some (Error e) // Возвращаем ошибку, если она есть
-                        | Ok _ -> None) // Пропускаем успешные результаты
-                    |> function
-                        | Some err -> err // Возвращаем первую ошибку
-                        | None -> Ok ()   // Если ошибок нет, возвращаем Ok
                         
                 do! pgSession.tryFinish() |> Async.RunSynchronously
             }
