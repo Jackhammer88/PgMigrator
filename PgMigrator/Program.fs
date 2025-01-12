@@ -10,6 +10,7 @@ open FsToolkit.ErrorHandling
 open PgMigrator.Types
 
 module PgMigratorMain =
+    /// Создаёт карту маппинга типов, включая пользовательские, если они объявлены в конфигурации.
     let generateTypeMappings userTypeMappings sourceType =
         let userMappings = 
             userTypeMappings
@@ -29,6 +30,21 @@ module PgMigratorMain =
 
         combinedMappings
     
+    let processFlowResult flowResult =
+        match flowResult with
+        | Ok _ ->
+            printfn "Migration complete successfully"
+            0
+        | Error e ->
+            printfn $"An error occurred: {e}"
+            match GlobalLogger.instance.Mode with
+            | FileMode f -> printfn $"{Environment.NewLine}For details, see the logfile at: '{f}'"
+            | VerboseFileMode f -> printfn $"{Environment.NewLine}For details, see the logfile at: '{f}'"
+            | _ -> ()
+            1
+    
+    /// Фильтрует таблицы БД согласно списка БД из конфигурации.
+    /// При пустом списке конфигурации выбирает все доступные таблицы.
     let filterTables (userTables : string list) dbTables =
         if userTables.Length <> 0 then
             userTables
@@ -40,6 +56,7 @@ module PgMigratorMain =
         else
             dbTables
     
+    /// Пытается подготовить источник миграции к использованию.
     let tryGetSourceProvider sourceType cs schema =
         match sourceType with
             | Mssql -> MssqlProvider.createAsync cs schema |> Async.RunSynchronously
@@ -47,24 +64,32 @@ module PgMigratorMain =
     
     [<EntryPoint>]
     let main args =
-        CommandLineParser.processCliCommands args
-        let configFile = CommandLineParser.getConfigPath args
-
-        // Читаем конфигурацию
-        let config = ConfigManager.readConfig configFile
-        
-        let sourceType = config.getSourceType
-        let sourceSchema = config.SourceSchema
-        let targetSchema = config.TargetSchema
-        let sourceCs = config.SourceCs
-        let targetCs = config.TargetCs
-        let typeMappings = generateTypeMappings config.TypeMappings sourceType
-        let tableMappings = config.TableMappings
-
+        // Измерение времени выполнения
         let stopwatch = Stopwatch.StartNew()
         
         let flowResult =
             result {
+                // Настройка уровня логгирования
+                let isLoggerVerbose = CommandLineParser.getLoggerMode args
+                GlobalLogger.setupLogger isLoggerVerbose
+                
+                // Обработка аргументов-действий
+                CommandLineParser.processCliCommands args    
+                
+                // Чтение файла конфигурации
+                let configFile = CommandLineParser.getConfigPath args
+                
+                // Читаем конфигурацию
+                let! config = ConfigManager.tryReadConfig configFile
+                
+                let sourceType = config.getSourceType
+                let sourceSchema = config.SourceSchema
+                let targetSchema = config.TargetSchema |> Option.defaultValue "public"
+                let sourceCs = config.SourceCs
+                let targetCs = config.TargetCs
+                let typeMappings = generateTypeMappings config.TypeMappings sourceType
+                let tableMappings = config.TableMappings
+                
                 // Получаем провайдера данных источника
                 use! sourceProvider = tryGetSourceProvider sourceType sourceCs sourceSchema
                 
@@ -86,15 +111,14 @@ module PgMigratorMain =
                 let tableNames = filteredTable |> List.map _.TableName
                 do! TableMigrator.tryMigrateAllTablesAsync sourceProvider pgSession targetSchema tableNames tableMappings typeMappings
                     |> Async.RunSynchronously
-                        
+               
+                // Применяем транзакцию
                 do! pgSession.tryFinish() |> Async.RunSynchronously
             }
         
-        match flowResult with
-        | Ok _ ->
-            printfn "Migration complete successfully"
+        let errorCode = processFlowResult flowResult
+        
+        if errorCode = 0 then
             printfn $"{stopwatch.Elapsed.TotalSeconds} seconds"
-            0
-        | Error e ->
-            printfn $"Error: {e}"
-            1
+            
+        errorCode

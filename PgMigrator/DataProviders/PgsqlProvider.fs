@@ -1,8 +1,8 @@
 namespace PgMigrator.DataProviders
 
 open System.Data
-open FsToolkit.ErrorHandling
 open Npgsql
+open PgMigrator
 open PgMigrator.Mapping
 open PgMigrator.Types
 open Dapper
@@ -76,7 +76,7 @@ module PgsqlProvider =
                 let! columns = connection.QueryAsync<ColumnInfo>(query) |> Async.AwaitTask
                 return columns.AsList() |> List.ofSeq |> processDbTablesInfo |> Result.Ok
             with ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
 
@@ -132,7 +132,7 @@ module PgsqlProvider =
                               yield columnNames
                                     |> List.map (fun (n, _, _, t) -> sourceReader.GetValue(n), t) ] }
             with ex ->
-                System.Console.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
 
@@ -149,6 +149,6 @@ module PgsqlProvider =
                           destroy = connection.Dispose
                           tryGetTablesInfo = getTablesInfoAsync connection schema }
             with ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }

@@ -1,7 +1,6 @@
 namespace PgMigrator.DataProviders
 
 open System
-open Npgsql
 open NpgsqlTypes
 open PgMigrator.Types
 

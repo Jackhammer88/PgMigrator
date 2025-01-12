@@ -13,6 +13,8 @@ PgMigrator Usage:
 
 Options:
   --help, -h              Show this help message.
+  --debug, -d,
+    --verbose, -v         Run with debug logging level.
   --generate-config, -g <file>   Generate a default configuration file at the specified folder path.
 """
 
@@ -20,6 +22,10 @@ Options:
         match args |> Array.toList with
         | configFile :: _ when File.Exists configFile -> configFile
         | _ -> "config.yaml"
+        
+    let getLoggerMode (args: string[])  =
+        let debugKeys = [ "-d"; "-v"; "--debug"; "--verbose" ]
+        args |> Array.exists (fun arg -> List.contains arg debugKeys)
 
     let processCliCommands (args: string[]) =
         match args |> Array.toList with

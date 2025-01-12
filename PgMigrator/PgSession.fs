@@ -2,11 +2,12 @@ namespace PgMigrator.Types
 
 open System
 open Npgsql
+open PgMigrator
 open PgMigrator.DataProviders
 
 type PgSession = {
     tryRunQuery : string -> Async<Result<unit,string>>
-    tryWriteRecords : SourceTableData -> string option -> string -> TableMapping list -> Async<Result<unit,string>>
+    tryWriteRecords : SourceTableData -> string -> string -> TableMapping list -> Async<Result<unit,string>>
     destroy : unit -> unit
     tryFinish : unit -> Async<Result<unit,string>>
 } with interface IDisposable with
@@ -17,13 +18,10 @@ module PgSessionFactory =
         (connection : NpgsqlConnection)
         (transaction : NpgsqlTransaction)
         (records : SourceTableData)
-        targetSchema
+        schema
         tableName
         (tableMappings : TableMapping list)= async {
             try
-                // Если требуется, преобразуем имя целевой схемы
-                let schema = targetSchema |> Option.defaultValue "public"
-
                 let tableMappingsSet =
                     tableMappings
                     |> List.map (fun mapping -> mapping.Old, mapping) // Создаем пары (Old, TableMapping)
@@ -38,22 +36,21 @@ module PgSessionFactory =
                     connection.BeginBinaryImportAsync(
                         $"COPY {targetTableName} ({records.ColumnNamesString}) FROM STDIN (FORMAT BINARY)")
                     |> Async.AwaitTask
-
-                let complete =
-                    records.ColumnValues
-                    |> Seq.iter(fun l ->
-                        writer.StartRow()
-                        
-                        l |> List.iter (fun (value,dbType) ->
-                            writer.Write(value,dbType)
-                            ())
-                        ())
-                    |> writer.Complete
+                    
+                
+                for row in records.ColumnValues do
+                    do! writer.StartRowAsync() |> Async.AwaitTask
+                    
+                    for value,dbType in row do
+                        do! writer.WriteAsync(value,dbType) |> Async.AwaitTask |> Async.Ignore
+                 
+                do! writer.CompleteAsync().AsTask() |> Async.AwaitTask |> Async.Ignore
                 
                 return Ok ()
             with
             | ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "Failed to write records" ex
+                do! transaction.RollbackAsync() |> Async.AwaitTask
                 return Error ex.Message
         }
         
@@ -65,7 +62,7 @@ module PgSessionFactory =
                 let! _ = command.ExecuteNonQueryAsync() |> Async.AwaitTask
                 return Ok()
             with ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
         
@@ -75,7 +72,7 @@ module PgSessionFactory =
             return Ok ()
         with
         | ex ->
-            System.Console.Error.WriteLine(ex)
+            GlobalLogger.instance.logError "" ex
             return Error ex.Message
     }
     
@@ -85,18 +82,21 @@ module PgSessionFactory =
             do! connection.OpenAsync() |> Async.AwaitTask
             let! transaction = connection.BeginTransactionAsync().AsTask() |> Async.AwaitTask
             
+            let tryRunQuery' = tryRunQuery connection
+            let tryWriteRecords' = tryWriteRecordsAsync connection transaction
+            let destroy' () =
+                transaction.Dispose()
+                connection.Dispose()
+            let tryFinish' () = tryFinish transaction
+
             return Ok {
-                tryRunQuery = tryRunQuery connection
-                tryWriteRecords = tryWriteRecordsAsync connection transaction
-                
-                destroy = fun _ ->
-                    transaction.Dispose()
-                    connection.Dispose()
-                    
-                tryFinish = fun _ -> tryFinish transaction
+                tryRunQuery = tryRunQuery'
+                tryWriteRecords = tryWriteRecords'
+                destroy = destroy'
+                tryFinish = tryFinish'
             }
         with
         | ex ->
-            System.Console.Error.WriteLine(ex)
+            GlobalLogger.instance.logError "" ex
             return Error ex.Message
     }

@@ -3,6 +3,7 @@ namespace PgMigrator.DataProviders
 open System.Data
 open Microsoft.Data.SqlClient
 open Microsoft.FSharp.Control
+open PgMigrator
 open PgMigrator.Mapping
 open PgMigrator.Types
 open Dapper
@@ -82,7 +83,7 @@ ORDER BY
                 let! columns = connection.QueryAsync<ColumnInfo>(query) |> Async.AwaitTask
                 return columns.AsList() |> List.ofSeq |> processDbTablesInfo |> Result.Ok
             with ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
 
@@ -140,7 +141,7 @@ ORDER BY
                                   yield columnNames
                                         |> List.map (fun (n, _, _, t) -> sourceReader.GetValue(n), t) ] }
             with ex ->
-                System.Console.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
 
@@ -159,6 +160,6 @@ ORDER BY
                           destroy = connection.Dispose
                           }
             with ex ->
-                System.Console.Error.WriteLine(ex)
+                GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }

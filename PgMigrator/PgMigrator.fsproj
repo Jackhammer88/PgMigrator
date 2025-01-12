@@ -9,8 +9,10 @@
         <Compile Include="Types\SourceTypes.fs" />
         <Compile Include="Types\ColumnInfo.fs" />
         <Compile Include="Types\TableInfo.fs" />
+        <Compile Include="Logger.fs" />
         <Compile Include="Config\Types.fs" />
         <Compile Include="Config\ConfigManager.fs" />
+        <Compile Include="CommandLineParser.fs" />
         <Compile Include="Mapping\DbTypeDefaultMappings.fs" />
         <Compile Include="Mapping\DbTypeMapper.fs" />
         <Compile Include="Mapping\TargetDataMapper.fs" />
@@ -20,7 +22,6 @@
         <Compile Include="PgSession.fs" />
         <Compile Include="SchemaGenerator.fs" />
         <Compile Include="TableMigrator.fs" />
-        <Compile Include="CommandLineParser.fs" />
         <Compile Include="Program.fs" />
     </ItemGroup>
 
@@ -30,6 +31,9 @@
       <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
       <PackageReference Include="Npgsql" Version="8.0.6" />
       <PackageReference Include="YamlDotNet" Version="16.3.0" />
+      <PackageReference Include="Serilog" Version="4.2.0" />
+      <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+      <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     </ItemGroup>
 
 </Project>
