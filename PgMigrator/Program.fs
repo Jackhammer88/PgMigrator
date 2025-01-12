@@ -2,8 +2,11 @@ namespace PgMigrator
 
 open System
 open System.Diagnostics
+open FsToolkit.ErrorHandling.Operator.Result
+open Microsoft.FSharp.Core
 open Npgsql
 open PgMigrator.Config
+open PgMigrator.DataProviders
 open PgMigrator.Mapping
 open FsToolkit.ErrorHandling
 open PgMigrator.Types
@@ -23,9 +26,8 @@ module PgMigratorMain =
         // Объединяем словари. Пользовательские маппинги перезаписывают дефолтные
         let combinedMappings =
             match sourceType with
-            | SourceTypes.mssql -> Map.fold (fun acc key value -> Map.add key value acc) DbTypeDefaultMappings.mssqlToPgsql userMappings
-            | SourceTypes.postgres -> userMappings
-            | _ -> failwithf $"Unknown source type: '{sourceType}'"
+            | Mssql -> Map.fold (fun acc key value -> Map.add key value acc) DbTypeDefaultMappings.mssqlToPgsql userMappings
+            | Pgsql -> userMappings
 
         combinedMappings
     
@@ -39,27 +41,11 @@ module PgMigratorMain =
             |> Seq.toList
         else
             dbTables
-            
-    /// Подготовка подключений
-    let prepareConnections config =
-        try
-            let sourceConnection =
-                SourceDataProvider.getSourceConnection config.SourceCs config.SourceType
-            sourceConnection.Open()
-            
-            let targetConnection = new NpgsqlConnection(config.TargetCs)
-            targetConnection.Open()
-            let transaction = targetConnection.BeginTransaction()
-            
-            {
-                Source = sourceConnection
-                Target = targetConnection
-                Transaction = transaction
-            }
-        with
-        | ex ->
-            Console.Error.WriteLine(ex)
-            failwith $"{ex}"
+    
+    let tryGetSourceProvider sourceType cs schema =
+        match sourceType with
+            | Mssql -> MssqlProvider.createAsync cs schema |> Async.RunSynchronously
+            | Pgsql -> PgsqlProvider.createAsync cs schema |> Async.RunSynchronously
     
     [<EntryPoint>]
     let main args =
@@ -68,47 +54,55 @@ module PgMigratorMain =
 
         // Читаем конфигурацию
         let config = ConfigManager.readConfig configFile
-        let typeMappings = generateTypeMappings config.TypeMappings config.SourceType
         
-        // Получение информации о таблицах источника
-        let dbTables = TableManager.getTablesInfo config.SourceCs config.SourceType config.SourceSchema
+        let sourceType = config.getSourceType
+        let sourceSchema = config.SourceSchema
+        let targetSchema = config.TargetSchema
+        let sourceCs = config.SourceCs
+        let targetCs = config.TargetCs
+        let typeMappings = generateTypeMappings config.TypeMappings sourceType
+        let tableMappings = config.TableMappings
 
-        // Фильтрация по выбранным таблицам
-        let filteredTable = filterTables config.Tables dbTables
-
-        if filteredTable.Length > 0 then
-            let stopwatch = Stopwatch.StartNew()
-
-            use connectionsInfo = prepareConnections config
-            
-            let flowResult =
-                result {                    
-                    // Создание схемы БД
-                    let script = SchemaGenerator.makeSchemaScript filteredTable config typeMappings
-                    do! TargetDbScriptRunner.tryRun connectionsInfo script
-                    
-                    // Мигация таблиц
-                    do! SourceDataProvider.migrateAllTablesAsync filteredTable connectionsInfo config typeMappings
-                        |> Async.RunSynchronously
-                        |> Seq.filter _.IsError
-                        |> Seq.tryPick (function
-                            | Error e -> Some (Error e) // Возвращаем ошибку, если она есть
-                            | Ok _ -> None) // Пропускаем успешные результаты
-                        |> function
-                            | Some err -> err // Возвращаем первую ошибку
-                            | None -> Ok ()   // Если ошибок нет, возвращаем Ok
-                }
-            
-            match flowResult with
-            | Ok _ ->
-                connectionsInfo.Transaction.Commit()
-                printfn "Migration complete successfully"
-                printfn $"{stopwatch.Elapsed.TotalSeconds} seconds"
-                0
-            | Error e ->
-                connectionsInfo.Transaction.Rollback()
-                printfn $"Error: {e}"
-                1
-        else
-            printf "No selected tables."
+        let stopwatch = Stopwatch.StartNew()
+        
+        let flowResult =
+            result {
+                // Получаем провайдера данных источника
+                use! sourceProvider = tryGetSourceProvider sourceType sourceCs sourceSchema
+                
+                 // Получение информации о таблицах источника
+                let! dbTables = sourceProvider.tryGetTablesInfo() |> Async.RunSynchronously
+                // Фильтрация по выбранным таблицам
+                let filteredTable = filterTables config.Tables dbTables
+                do! match filteredTable.Length with
+                    | c when c > 0 -> Ok ()
+                    | _ -> Error "No tables found"
+                                
+                // Создание схемы БД
+                let script = SchemaGenerator.makeSchemaScript filteredTable tableMappings typeMappings sourceSchema                
+                use! pgSession = PgSessionFactory.tryCreateAsync targetCs |> Async.RunSynchronously
+                do! pgSession.tryRunQuery script |> Async.RunSynchronously
+                
+                // Мигация таблиц
+                let t = filteredTable |> List.map _.TableName
+                do! SourceDataProvider.migrateAllTablesAsync t sourceProvider pgSession config typeMappings
+                    |> Async.RunSynchronously
+                    |> Seq.filter _.IsError
+                    |> Seq.tryPick (function
+                        | Error e -> Some (Error e) // Возвращаем ошибку, если она есть
+                        | Ok _ -> None) // Пропускаем успешные результаты
+                    |> function
+                        | Some err -> err // Возвращаем первую ошибку
+                        | None -> Ok ()   // Если ошибок нет, возвращаем Ok
+                        
+                do! pgSession.tryFinish() |> Async.RunSynchronously
+            }
+        
+        match flowResult with
+        | Ok _ ->
+            printfn "Migration complete successfully"
+            printfn $"{stopwatch.Elapsed.TotalSeconds} seconds"
             0
+        | Error e ->
+            printfn $"Error: {e}"
+            1

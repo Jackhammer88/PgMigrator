@@ -1,4 +1,4 @@
-namespace PgMigrator.Config
+namespace PgMigrator.Types
 
 open YamlDotNet.Serialization
 
@@ -50,7 +50,7 @@ type MigrationConfig = {
       RemoveNullBytes: bool option
       
       [<YamlMember(Alias = "SourceType")>]
-      SourceType: string
+      SourceTypeName: string
       
       [<YamlMember(Alias = "Tables")>]
       Tables: string list
@@ -60,4 +60,9 @@ type MigrationConfig = {
       
       [<YamlMember(Alias = "TableMappings")>]
       TableMappings: TableMapping list
-    }
+    } with
+        member this.getSourceType =
+            match this.SourceTypeName with
+            | SourceTypes.mssql -> Mssql
+            | SourceTypes.postgres -> Pgsql
+            | s -> failwith $"Unknown source type {s}"

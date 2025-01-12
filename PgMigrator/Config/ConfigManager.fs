@@ -41,10 +41,10 @@ module ConfigManager =
 
     let private validateConfig (config: MigrationConfig) =
         // Проверим SourceType
-        match config.SourceType.ToLowerInvariant() with
+        match config.SourceTypeName.ToLowerInvariant() with
         | SourceTypes.postgres
         | SourceTypes.mssql -> () // OK
-        | _ -> failwithf $"Unsupported SourceType: '%s{config.SourceType}'"
+        | _ -> failwithf $"Unsupported SourceType: '%s{config.SourceTypeName}'"
 
         // Проверим, что SourceCs и TargetCs не пустые
         if String.IsNullOrWhiteSpace config.SourceCs then
@@ -80,7 +80,7 @@ module ConfigManager =
                 SourceSchema = Some "dbo"
                 TargetSchema = Some "public"
                 RemoveNullBytes = Some true
-                SourceType = SourceTypes.mssql
+                SourceTypeName = SourceTypes.mssql
                 Tables = []
                 TableMappings = [
                     {

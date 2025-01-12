@@ -1,6 +1,6 @@
 namespace PgMigrator.Mapping
 
-open PgMigrator.Config
+open PgMigrator.Types
 
 module DbTypeDefaultMappings =
     let mssqlToPgsql =

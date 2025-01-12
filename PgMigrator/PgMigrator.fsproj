@@ -6,18 +6,19 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <Compile Include="Types\ColumnInfo.fs" />
-        <Compile Include="Types\ConnectionsInfo.fs" />
-        <Compile Include="Types\TableInfo.fs" />
         <Compile Include="Types\SourceTypes.fs" />
+        <Compile Include="Types\ColumnInfo.fs" />
+        <Compile Include="Types\TableInfo.fs" />
         <Compile Include="Config\Types.fs" />
         <Compile Include="Config\ConfigManager.fs" />
         <Compile Include="Mapping\DbTypeDefaultMappings.fs" />
         <Compile Include="Mapping\DbTypeMapper.fs" />
         <Compile Include="Mapping\TargetDataMapper.fs" />
+        <Compile Include="DataProviders\SourceProvider.fs" />
+        <Compile Include="DataProviders\MssqlProvider.fs" />
+        <Compile Include="DataProviders\PgsqlProvider.fs" />
+        <Compile Include="PgSession.fs" />
         <Compile Include="SchemaGenerator.fs" />
-        <Compile Include="TableManager.fs" />
-        <Compile Include="TargetDbScriptRunner.fs" />
         <Compile Include="SourceDataReader.fs" />
         <Compile Include="SourceDataProvider.fs" />
         <Compile Include="CommandLineParser.fs" />

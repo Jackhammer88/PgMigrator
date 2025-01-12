@@ -52,12 +52,17 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
         | None -> script
         
     
-    let makeSchemaScript (tables: List<TableInfo>) (config: MigrationConfig) (typeMappings : Map<string,TypeMapping>) : string =
+    let makeSchemaScript
+        (tables: TableInfo list)
+        (tableMappings : TableMapping list)
+        (typeMappings : Map<string,TypeMapping>)
+        schema
+        : string =
         let tableMap =
-            config.TableMappings
+            tableMappings
             |> List.map (fun m -> m.Old, m)
             |> Map.ofList
         
         tables
-        |> Seq.fold (fun acc table -> acc + (formatColumnList table typeMappings tableMap config.TargetSchema)) ""
-        |> addSchemaCreationScript config.TargetSchema
+        |> Seq.fold (fun acc table -> acc + (formatColumnList table typeMappings tableMap schema)) ""
+        |> addSchemaCreationScript schema

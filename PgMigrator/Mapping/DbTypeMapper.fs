@@ -3,6 +3,7 @@ namespace PgMigrator.Mapping
 open System.Text.RegularExpressions
 open NpgsqlTypes
 open PgMigrator.Config
+open PgMigrator.Types
 
 module DbTypeMapper =
     let private tryGetTypeOrInner sourceType (typeMappings: Map<string, TypeMapping>) =
