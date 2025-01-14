@@ -103,47 +103,81 @@ ORDER BY
         | s when s = "date" || s = "user" || s = "order" -> $"\"{s}\""
         | _ -> columnName
         
+        
+    let fetchDataAsync
+        (connection: SqlConnection)
+        typeMappings
+        query= async {
+        try                
+            // Выполним SELECT * из исходной БД
+            use selectCommand = connection.CreateCommand()
+            selectCommand.CommandText <- query
+            use! sourceReader = selectCommand.ExecuteReaderAsync() |> Async.AwaitTask
+                
+            // Получаем имена и типы столбцов исходной таблицы
+            let columnsCount = sourceReader.FieldCount
+
+            let columnNames =
+                [ for i in 0 .. columnsCount - 1 do
+                      let columnName = sourceReader.GetName(i)
+                      let columnTypeName = sourceReader.GetDataTypeName(i)
+                      yield mapNameToPgType i columnName columnTypeName typeMappings ]
+               
+            // Форматируем строку с именами столбцов для вставки
+            let columnNamesString =
+                columnNames
+                |> List.map (fun (_, name, _, _) -> escapeColumnName name)
+                |> String.concat ", "
+            
+            return
+                Ok
+                    { ColumnNamesString = columnNamesString
+                      ColumnValues =
+                        [ while sourceReader.Read() do
+                              yield columnNames
+                                    |> List.map (fun (n, _, _, t) -> sourceReader.GetValue(n), t) ] }
+        with ex ->
+            GlobalLogger.instance.logError "" ex
+            return Error ex.Message
+    }
+    
+    let tryReadTablePartAsync
+        (connection: SqlConnection)
+        (sourceSchema: string option)
+        (tableName: string)
+        (tableInfo: TableInfo)
+        typeMappings
+        offset
+        count= async {
+            if tableInfo.Columns.Length = 0 then
+                failwith $"tableName: '{tableName}'. tableInfo.Columns.Length = 0"
+            
+            let escapedTableName = $"[{tableName}]" |> addSchemaName sourceSchema
+            
+            let orderCondition =
+                    tableInfo.Columns
+                    |> List.filter _.IsPrimaryKey
+                    |> List.map _.ColumnName
+                    |> function
+                        | [] -> tableInfo.Columns |> List.head |> _.ColumnName
+                        | keys -> keys |> String.concat ", "
+                    |> (fun c -> $"ORDER BY {c}")
+
+            let query =
+                $"SELECT * FROM {escapedTableName} {orderCondition} OFFSET {offset} ROWS FETCH NEXT {count} ROWS ONLY"
+            
+            return! fetchDataAsync connection typeMappings query
+        }
+        
     let tryReadTableAsync
         (connection: SqlConnection)
         (sourceSchema: string option)
         (tableName: string)
         typeMappings
         =
-        async {
             let escapedTableName = $"[{tableName}]" |> addSchemaName sourceSchema
-
-            try
-                // Выполним SELECT * из исходной БД
-                use selectCommand = connection.CreateCommand()
-                selectCommand.CommandText <- $"SELECT * FROM {escapedTableName}"
-                use! sourceReader = selectCommand.ExecuteReaderAsync() |> Async.AwaitTask
-
-                // Получаем имена и типы столбцов исходной таблицы
-                let columnsCount = sourceReader.FieldCount
-
-                let columnNames =
-                    [ for i in 0 .. columnsCount - 1 do
-                          let columnName = sourceReader.GetName(i)
-                          let columnTypeName = sourceReader.GetDataTypeName(i)
-                          yield mapNameToPgType i columnName columnTypeName typeMappings ]
-
-                // Форматируем строку с именами столбцов для вставки
-                let columnNamesString =
-                    columnNames
-                    |> List.map (fun (_, name, _, _) -> escapeColumnName name)
-                    |> String.concat ", "
-
-                return
-                    Ok
-                        { ColumnNamesString = columnNamesString
-                          ColumnValues =
-                            [ while sourceReader.Read() do
-                                  yield columnNames
-                                        |> List.map (fun (n, _, _, t) -> sourceReader.GetValue(n), t) ] }
-            with ex ->
-                GlobalLogger.instance.logError "" ex
-                return Error ex.Message
-        }
+            let query = $"SELECT * FROM {escapedTableName}"
+            fetchDataAsync connection typeMappings query
 
     let createAsync cs schema =
         async {
@@ -156,6 +190,7 @@ ORDER BY
                         {
                           SourceType = Mssql
                           tryGetTablesInfo = tryGetTablesInfo connection schema
+                          tryReadTablePart = tryReadTablePartAsync connection schema
                           tryReadTable = tryReadTableAsync connection schema
                           destroy = connection.Dispose
                           }

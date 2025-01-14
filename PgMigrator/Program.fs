@@ -57,8 +57,11 @@ module PgMigratorMain =
             dbTables
     
     /// Пытается подготовить источник миграции к использованию.
-    let tryGetSourceProvider sourceType cs schema =
-        match sourceType with
+    let tryGetSourceProvider (connectionsInfo : ConnectionsInfo) =
+        let cs = connectionsInfo.SourceCs
+        let schema = connectionsInfo.SourceSchema
+        
+        match connectionsInfo.SourceType with
             | Mssql -> MssqlProvider.createAsync cs schema |> Async.RunSynchronously
             | Pgsql -> PgsqlProvider.createAsync cs schema |> Async.RunSynchronously
     
@@ -81,38 +84,57 @@ module PgMigratorMain =
                 
                 // Читаем конфигурацию
                 let! config = ConfigManager.tryReadConfig configFile
-                
-                let sourceType = config.getSourceType
-                let sourceSchema = config.SourceSchema
-                let targetSchema = config.TargetSchema |> Option.defaultValue "public"
-                let sourceCs = config.SourceCs
-                let targetCs = config.TargetCs
-                let typeMappings = generateTypeMappings config.TypeMappings sourceType
-                let tableMappings = config.TableMappings
-                let removeNullBytes = config.RemoveNullBytes |> Option.defaultValue false
+      
+                let connectionsInfo = {
+                    TargetCs = config.TargetCs
+                    SourceCs = config.SourceCs
+                    SourceType = config.getSourceType
+                    SourceSchema = config.SourceSchema
+                    TargetSchema = config.TargetSchema
+                }
                 
                 // Получаем провайдера данных источника
-                use! sourceProvider = tryGetSourceProvider sourceType sourceCs sourceSchema
+                use! sourceProvider = tryGetSourceProvider connectionsInfo
                 
                  // Получение информации о таблицах источника
                 let! dbTables = sourceProvider.tryGetTablesInfo() |> Async.RunSynchronously
                 
                 // Фильтрация по выбранным таблицам
-                let filteredTable = filterTables config.Tables dbTables
-                do! match filteredTable.Length with
+                let filterTables = filterTables config.Tables dbTables
+                do! match filterTables.Length with
                     | c when c > 0 -> Ok ()
                     | _ -> Error "No tables found"
+                    
+                let dbReflectionData = {
+                    TablesInfo = filterTables
+                    TableMappings = config.TableMappings
+                    TypeMappings = generateTypeMappings config.TypeMappings connectionsInfo.SourceType
+                    TargetSchema = config.TargetSchema |> Option.defaultValue "public"
+                }
                                 
                 // Создание схемы БД
-                let script = SchemaGenerator.makeSchemaScript filteredTable tableMappings typeMappings targetSchema                
-                use! pgSession = PgSessionFactory.tryCreateAsync targetCs |> Async.RunSynchronously
+                let script = SchemaGenerator.makeSchemaScript dbReflectionData                
+                use! pgSession = PgSessionFactory.tryCreateAsync connectionsInfo.TargetCs |> Async.RunSynchronously
                 do! pgSession.tryRunQuery script |> Async.RunSynchronously
                 
                 // Миграция таблиц
-                let tableNames = filteredTable |> List.map _.TableName
-                do! TableMigrator.tryMigrateAllTablesAsync sourceProvider pgSession targetSchema tableNames tableMappings typeMappings removeNullBytes
-                    |> Async.RunSynchronously
-               
+                let migrationData : MigrationFlowData = {
+                    Tables = filterTables |> List.map _.TableName
+                    TablesInfo = dbReflectionData.TablesInfo
+                    TargetSchema = dbReflectionData.TargetSchema
+                    TableMappings = dbReflectionData.TableMappings
+                    TypeMappings = dbReflectionData.TypeMappings
+                    RemoveNullBytes = config.RemoveNullBytes |> Option.defaultValue false
+                }
+                
+                // Выбор стратегии миграции
+                let asyncScenario =
+                    match config.BatchSize with
+                    | None -> TableMigrator.tryMigrateEagerAsync sourceProvider pgSession migrationData
+                    | Some size -> TableMigrator.tryMigrateSequentialAsync sourceProvider pgSession migrationData size
+                
+                do! asyncScenario |> Async.RunSynchronously
+                
                 // Применяем транзакцию
                 do! pgSession.tryFinish() |> Async.RunSynchronously
             }

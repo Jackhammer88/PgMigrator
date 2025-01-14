@@ -64,6 +64,12 @@ module ConfigManager =
 
             // Проверим Mapping
             validateTypeMapping config.TypeMappings
+            
+            // Проверим BatchSize
+            match config.BatchSize with
+            | Some size when size <= 0 -> failwith $"Wrong batch size: '{size}'"
+            | None -> () // OK
+            | Some _ -> () // OK
 
             config.TableMappings |> List.iter validateTableMapping
             
@@ -91,6 +97,7 @@ module ConfigManager =
                 "User ID=postgres;Password=yourStrongPass;Host=127.0.0.1;Port=5432;Database=yourBase;Pooling=true;Connection Lifetime=0;"
               SourceSchema = Some "dbo"
               TargetSchema = Some "public"
+              BatchSize = None
               RemoveNullBytes = Some true
               SourceTypeName = SourceTypes.mssql
               Tables = []

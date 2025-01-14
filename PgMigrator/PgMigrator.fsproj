@@ -13,6 +13,7 @@
         <Compile Include="Logger.fs" />
         <Compile Include="Config\Types.fs" />
         <Compile Include="Config\ConfigManager.fs" />
+        <Compile Include="Config\FlowTypes.fs" />
         <Compile Include="CommandLineParser.fs" />
         <Compile Include="Mapping\DbTypeDefaultMappings.fs" />
         <Compile Include="Mapping\DbTypeMapper.fs" />

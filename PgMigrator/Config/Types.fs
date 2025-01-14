@@ -46,6 +46,9 @@ type MigrationConfig = {
       [<YamlMember(Alias = "TargetSchema")>]
       TargetSchema: string option
       
+      [<YamlMember(Alias = "BatchSize")>]
+      BatchSize: int option
+      
       [<YamlMember(Alias = "RemoveNullBytes")>]
       RemoveNullBytes: bool option
       
