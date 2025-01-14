@@ -6,6 +6,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="Helpers\Seq.fs" />
         <Compile Include="Types\SourceTypes.fs" />
         <Compile Include="Types\ColumnInfo.fs" />
         <Compile Include="Types\TableInfo.fs" />

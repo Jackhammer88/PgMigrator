@@ -11,14 +11,12 @@ module SchemaGenerator =
     
     let private formatColumnList
         (tableInfo : TableInfo) (typeMap: Map<string, TypeMapping>) (tableMap: Map<string, TableMapping>) targetSchema=
-        let schema = targetSchema |> Option.defaultValue "public"
-        
         let newTableName =
             match tableMap.TryFind tableInfo.TableName with
             | Some newName -> newName.New
             | None -> tableInfo.TableName
             |> escapePgTableName
-            |> fun tableName -> $"{schema}.{tableName}"
+            |> fun tableName -> $"{targetSchema}.{tableName}"
             
         let compositePk =
             if tableInfo.PkCount > 1 then
@@ -46,16 +44,13 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
     """
     
     let private addSchemaCreationScript schemaName script =
-        match schemaName with
-        | Some name -> $"CREATE SCHEMA IF NOT EXISTS {name};\n{script}" 
-        | None -> script
-        
+        $"CREATE SCHEMA IF NOT EXISTS {schemaName};\n{script}"
     
     let makeSchemaScript
         (tables: TableInfo list)
         (tableMappings : TableMapping list)
         (typeMappings : Map<string,TypeMapping>)
-        schema
+        targetSchema
         : string =
         let tableMap =
             tableMappings
@@ -63,5 +58,5 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
             |> Map.ofList
         
         tables
-        |> Seq.fold (fun acc table -> acc + (formatColumnList table typeMappings tableMap schema)) ""
-        |> addSchemaCreationScript schema
+        |> Seq.fold (fun acc table -> acc + (formatColumnList table typeMappings tableMap targetSchema)) ""
+        |> addSchemaCreationScript targetSchema

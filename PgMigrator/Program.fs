@@ -89,6 +89,7 @@ module PgMigratorMain =
                 let targetCs = config.TargetCs
                 let typeMappings = generateTypeMappings config.TypeMappings sourceType
                 let tableMappings = config.TableMappings
+                let removeNullBytes = config.RemoveNullBytes |> Option.defaultValue false
                 
                 // Получаем провайдера данных источника
                 use! sourceProvider = tryGetSourceProvider sourceType sourceCs sourceSchema
@@ -103,13 +104,13 @@ module PgMigratorMain =
                     | _ -> Error "No tables found"
                                 
                 // Создание схемы БД
-                let script = SchemaGenerator.makeSchemaScript filteredTable tableMappings typeMappings sourceSchema                
+                let script = SchemaGenerator.makeSchemaScript filteredTable tableMappings typeMappings targetSchema                
                 use! pgSession = PgSessionFactory.tryCreateAsync targetCs |> Async.RunSynchronously
                 do! pgSession.tryRunQuery script |> Async.RunSynchronously
                 
                 // Миграция таблиц
                 let tableNames = filteredTable |> List.map _.TableName
-                do! TableMigrator.tryMigrateAllTablesAsync sourceProvider pgSession targetSchema tableNames tableMappings typeMappings
+                do! TableMigrator.tryMigrateAllTablesAsync sourceProvider pgSession targetSchema tableNames tableMappings typeMappings removeNullBytes
                     |> Async.RunSynchronously
                
                 // Применяем транзакцию
