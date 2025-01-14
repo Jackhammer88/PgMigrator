@@ -31,7 +31,7 @@ module TableMigrator =
                     return
                         match result with
                         | Ok _ -> Ok()
-                        | Error e -> failwith e
+                        | Error e -> Error e
                 with ex ->
                     return Error ex.Message
             }

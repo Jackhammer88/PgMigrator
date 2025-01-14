@@ -6,7 +6,7 @@ open PgMigrator.Types
 open Xunit
 
 let tryRunQuery' _ : Async<Result<unit, string>> = async { return Ok() }
-let tryWriteRecords' _ _ _ _ = async { return Ok() }
+let tryWriteRecords' _ _ _ _ _= async { return Ok() }
 let pgSessionDestroy () = ()
 let tryFinish' () : Async<Result<unit, string>> = async { return Ok() }
 let tryGetTablesInfo' () = async { return Ok [] }
@@ -24,7 +24,7 @@ let pgProviderDestroy () =
 let tryMigrateAllTablesAsync_StopsOnWriteError_ReturnsTableName () =
     // Arrange
     let errorTableName = "Table3"
-    let tryWriteRecords'' _ _ tableName _ = async {
+    let tryWriteRecords'' _ _ tableName _ _ = async {
         return
             match tableName with
             | t when t = errorTableName -> Error t
@@ -52,6 +52,7 @@ let tryMigrateAllTablesAsync_StopsOnWriteError_ReturnsTableName () =
             [ "Table1"; "Table2"; errorTableName; "Table4" ]
             []
             Map.empty
+            true
         |> Async.RunSynchronously
 
     // Assert
@@ -99,6 +100,7 @@ let tryMigrateAllTablesAsync_StopsOnReadError_ReturnsTableName () =
             [ "Table1"; "Table2"; errorTableName; "Table4" ]
             []
             Map.empty
+            true
         |> Async.RunSynchronously
 
     // Assert
@@ -134,6 +136,7 @@ let tryMigrateAllTablesAsync_AllTablesPassedSuccessfully () =
             tables
             []
             Map.empty
+            true
         |> Async.RunSynchronously
 
     // Assert
