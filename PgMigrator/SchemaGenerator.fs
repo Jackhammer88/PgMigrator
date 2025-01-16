@@ -1,5 +1,7 @@
 namespace PgMigrator
 
+open System
+open System.Text.RegularExpressions
 open PgMigrator.Config
 open PgMigrator.Mapping
 open PgMigrator.Types
@@ -53,6 +55,38 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
 
     let private addSchemaCreationScript schemaName script =
         $"CREATE SCHEMA IF NOT EXISTS {schemaName};\n{script}"
+    
+    let private customTypes = [
+        "citext", "citext"
+        "hstore", "hstore"
+        "geometry", "postgis"
+        "geography", "postgis"
+        "ltree", "ltree"
+    ]
+        
+    let private generateExtensionsScript (extensions: string list) =
+        if extensions.Length > 0 then
+            let sql = 
+                "DO $$ BEGIN\n" +
+                (extensions |> List.map (fun ext -> $"  CREATE EXTENSION IF NOT EXISTS {ext};") |> String.concat "\n") +
+                "\nEND $$;"
+            Some sql
+        else
+            None
+            
+    let findExtensions (sqlContent: string) =
+        customTypes
+        |> List.filter (fun (typ, _) -> Regex.IsMatch(sqlContent, $@"\b{typ}\b", RegexOptions.IgnoreCase))
+        |> List.map snd
+        |> List.distinct
+        
+    let private addTypeExtensions script =
+        let extensions = findExtensions script
+        let extensionsScript =
+            match generateExtensionsScript extensions with
+            | Some sql -> $"{sql};{Environment.NewLine}"
+            | None -> ""
+        $"{extensionsScript}{script}"
 
     let makeSchemaScript (dbReflectionData: DbReflectionData) =
         let { TablesInfo = tablesInfo
@@ -65,4 +99,5 @@ CREATE TABLE {newTableName} ({columns}{compositePk}
 
         tablesInfo
         |> Seq.fold (fun acc table -> acc + (formatColumnList table typeMappings tableMap targetSchema)) ""
+        |> addTypeExtensions
         |> addSchemaCreationScript targetSchema

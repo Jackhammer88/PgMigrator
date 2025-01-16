@@ -26,7 +26,3 @@ module TargetDataMapper =
         | "smallint" -> NpgsqlDbType.Smallint
         | "char" -> NpgsqlDbType.Char
         | t -> failwith $"Unknown type: '{t}'"
-    
-    // let convertType sourceType (typeMappingsSet : Map<string, TypeMapping>) =
-    //     DbSchemaGenerator.resolveType typeMappingsSet sourceType
-    //     |> mapToNpgSqlDbType

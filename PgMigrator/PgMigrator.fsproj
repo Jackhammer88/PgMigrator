@@ -18,9 +18,9 @@
         <Compile Include="Mapping\DbTypeDefaultMappings.fs" />
         <Compile Include="Mapping\DbTypeMapper.fs" />
         <Compile Include="Mapping\TargetDataMapper.fs" />
-        <Compile Include="DataProviders\SourceProvider.fs" />
-        <Compile Include="DataProviders\MssqlProvider.fs" />
-        <Compile Include="DataProviders\PgsqlProvider.fs" />
+        <Compile Include="SourceProviders\SourceProvider.fs" />
+        <Compile Include="SourceProviders\MssqlProvider.fs" />
+        <Compile Include="SourceProviders\PgsqlProvider.fs" />
         <Compile Include="PgSession.fs" />
         <Compile Include="SchemaGenerator.fs" />
         <Compile Include="TableMigrator.fs" />

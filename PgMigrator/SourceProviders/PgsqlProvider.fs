@@ -35,6 +35,8 @@ module PgsqlProvider =
                 END || ')'
             WHEN c.data_type IN ('numeric', 'decimal') THEN 
                 c.data_type || '(' || c.numeric_precision::VARCHAR || ', ' || c.numeric_scale::VARCHAR || ')'
+            WHEN c.data_type = 'USER-DEFINED' THEN 
+                pt.typname
             ELSE 
                 c.data_type
         END AS  DataType,
@@ -43,27 +45,36 @@ module PgsqlProvider =
             WHEN kc.column_name IS NOT NULL THEN TRUE
             ELSE FALSE
         END AS IsPrimaryKey
-    FROM 
-        information_schema.tables t
+    FROM information_schema.tables t
     JOIN 
         information_schema.columns c
-    ON 
-        t.table_schema = c.table_schema AND t.table_name = c.table_name
+        ON t.table_schema = c.table_schema 
+        AND t.table_name = c.table_name
     LEFT JOIN 
         information_schema.key_column_usage kc
-    ON 
-        kc.table_schema = t.table_schema AND 
-        kc.table_name = t.table_name AND 
-        kc.column_name = c.column_name AND 
-        EXISTS (
+        ON kc.table_schema = t.table_schema 
+        AND kc.table_name = t.table_name 
+        AND kc.column_name = c.column_name 
+        AND EXISTS (
             SELECT 1 
             FROM information_schema.table_constraints tc
             WHERE 
-                tc.table_schema = kc.table_schema AND 
-                tc.table_name = kc.table_name AND 
-                tc.constraint_name = kc.constraint_name AND 
-                tc.constraint_type = 'PRIMARY KEY'
+                tc.table_schema = kc.table_schema 
+                AND tc.table_name = kc.table_name 
+                AND tc.constraint_name = kc.constraint_name 
+                AND tc.constraint_type = 'PRIMARY KEY'
         )
+    LEFT JOIN 
+        pg_catalog.pg_attribute pa
+        ON pa.attname = c.column_name 
+        AND pa.attrelid = (
+            SELECT c.oid FROM pg_catalog.pg_class c
+            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+            WHERE c.relname = t.table_name AND n.nspname = t.table_schema
+        )
+    LEFT JOIN 
+        pg_catalog.pg_type pt
+    ON pt.oid = pa.atttypid
     WHERE 
         t.table_type = 'BASE TABLE'
         {schemaCondition}
