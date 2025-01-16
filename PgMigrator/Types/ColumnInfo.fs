@@ -6,4 +6,5 @@ type ColumnInfo =
       ColumnName: string
       DataType: string
       IsNullable: bool
-      IsPrimaryKey: bool }
+      IsPrimaryKey: bool
+      IsUnique: bool }

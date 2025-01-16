@@ -39,19 +39,22 @@ module PgsqlProvider =
                 pt.typname
             ELSE 
                 c.data_type
-        END AS  DataType,
-        c.is_nullable = 'YES' AS IsNullable,
+        END AS DataType,
+        (c.is_nullable = 'YES') AS IsNullable,
         CASE
             WHEN kc.column_name IS NOT NULL THEN TRUE
             ELSE FALSE
-        END AS IsPrimaryKey
+        END AS IsPrimaryKey,
+        CASE
+            WHEN kcu_unique.column_name IS NOT NULL THEN TRUE
+            ELSE FALSE
+        END AS IsUnique
     FROM information_schema.tables t
-    JOIN 
-        information_schema.columns c
+    JOIN information_schema.columns c
         ON t.table_schema = c.table_schema 
         AND t.table_name = c.table_name
-    LEFT JOIN 
-        information_schema.key_column_usage kc
+    -- Признак Primary Key
+    LEFT JOIN information_schema.key_column_usage kc
         ON kc.table_schema = t.table_schema 
         AND kc.table_name = t.table_name 
         AND kc.column_name = c.column_name 
@@ -64,18 +67,33 @@ module PgsqlProvider =
                 AND tc.constraint_name = kc.constraint_name 
                 AND tc.constraint_type = 'PRIMARY KEY'
         )
-    LEFT JOIN 
-        pg_catalog.pg_attribute pa
+    -- Признак Unique
+    LEFT JOIN information_schema.key_column_usage kcu_unique
+        ON kcu_unique.table_schema = t.table_schema 
+        AND kcu_unique.table_name = t.table_name 
+        AND kcu_unique.column_name = c.column_name
+        AND EXISTS (
+            SELECT 1 
+            FROM information_schema.table_constraints tc
+            WHERE 
+                tc.table_schema = kcu_unique.table_schema 
+                AND tc.table_name = kcu_unique.table_name 
+                AND tc.constraint_name = kcu_unique.constraint_name 
+                AND tc.constraint_type = 'UNIQUE'
+        )
+    -- Для кастомных типов из pg_catalog
+    LEFT JOIN pg_catalog.pg_attribute pa
         ON pa.attname = c.column_name 
         AND pa.attrelid = (
-            SELECT c.oid FROM pg_catalog.pg_class c
-            JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-            WHERE c.relname = t.table_name AND n.nspname = t.table_schema
+            SELECT cl.oid 
+            FROM pg_catalog.pg_class cl
+            JOIN pg_catalog.pg_namespace ns ON ns.oid = cl.relnamespace
+            WHERE cl.relname = t.table_name 
+              AND ns.nspname = t.table_schema
         )
-    LEFT JOIN 
-        pg_catalog.pg_type pt
-    ON pt.oid = pa.atttypid
-    WHERE 
+    LEFT JOIN pg_catalog.pg_type pt
+        ON pt.oid = pa.atttypid
+    WHERE  
         t.table_type = 'BASE TABLE'
         {schemaCondition}
     ORDER BY 
@@ -182,7 +200,6 @@ module PgsqlProvider =
             return! fetchDataAsync connection typeMappings query
         }
     
-
     let createAsync cs schema =
         async {
             try
@@ -200,3 +217,4 @@ module PgsqlProvider =
                 GlobalLogger.instance.logError "" ex
                 return Error ex.Message
         }
+    

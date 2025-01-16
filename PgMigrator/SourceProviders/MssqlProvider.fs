@@ -49,7 +49,11 @@ module MssqlProvider =
     CASE 
         WHEN pk.COLUMN_NAME IS NOT NULL THEN 1
         ELSE 0
-    END AS IsPrimaryKey
+    END AS IsPrimaryKey,
+    CASE 
+        WHEN uq.COLUMN_NAME IS NOT NULL THEN 1
+        ELSE 0
+    END AS IsUnique
 FROM 
     INFORMATION_SCHEMA.TABLES t
 JOIN 
@@ -70,6 +74,21 @@ ON
             AND tc.CONSTRAINT_NAME = pk.CONSTRAINT_NAME
             AND tc.TABLE_NAME = pk.TABLE_NAME
             AND tc.TABLE_SCHEMA = pk.TABLE_SCHEMA
+    )
+LEFT JOIN 
+    INFORMATION_SCHEMA.KEY_COLUMN_USAGE uq
+ON 
+    uq.TABLE_NAME = t.TABLE_NAME 
+    AND uq.TABLE_SCHEMA = t.TABLE_SCHEMA 
+    AND uq.COLUMN_NAME = c.COLUMN_NAME
+    AND EXISTS (
+        SELECT 1 
+        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
+        WHERE 
+            tc.CONSTRAINT_TYPE = 'UNIQUE' 
+            AND tc.CONSTRAINT_NAME = uq.CONSTRAINT_NAME
+            AND tc.TABLE_NAME = uq.TABLE_NAME
+            AND tc.TABLE_SCHEMA = uq.TABLE_SCHEMA
     )
 WHERE 
     t.TABLE_TYPE = 'BASE TABLE'

@@ -43,9 +43,9 @@ module SchemaGenerator =
             tableInfo.Columns
             |> Seq.map (fun i ->
                 let newTypeName = DbTypeMapper.getTargetTypeName i.DataType typeMap
-
+                let uniqueSuffix = if i.IsUnique && not(i.IsPrimaryKey) then " UNIQUE" else ""
                 $"""
-    %s{i.ColumnName} %s{newTypeName} %s{if i.IsNullable then "NULL" else "NOT NULL"}%s{if i.IsPrimaryKey then singlePk else ""}""")
+    %s{i.ColumnName} %s{newTypeName} %s{if i.IsNullable then "NULL" else "NOT NULL"}%s{if i.IsPrimaryKey then singlePk else ""}{uniqueSuffix}""")
             |> String.concat ","
 
         $"""

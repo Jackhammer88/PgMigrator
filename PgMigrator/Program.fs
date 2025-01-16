@@ -113,9 +113,9 @@ module PgMigratorMain =
                 }
                                 
                 // Создание схемы БД
-                let script = SchemaGenerator.makeSchemaScript dbReflectionData                
+                let structureScript = SchemaGenerator.makeSchemaScript dbReflectionData           
                 use! pgSession = PgSessionFactory.tryCreateAsync connectionsInfo.TargetCs |> Async.RunSynchronously
-                do! pgSession.tryRunQuery script |> Async.RunSynchronously
+                do! pgSession.tryRunQuery structureScript |> Async.RunSynchronously
                 
                 // Миграция таблиц
                 let migrationData : MigrationFlowData = {
