@@ -5,6 +5,16 @@ open PgMigrator.DataProviders
 open PgMigrator.Types
 
 module TableMigrator =
+    
+    /// Map имён старых-новых таблиц для ускорения их поиска. (Old, TableMapping) 
+    let private createTablesMap (tablesMappings : TableMapping list) =
+        tablesMappings
+        |> List.map (fun mapping -> mapping.Old, mapping) 
+        |> Map.ofList
+        
+    let printProcess oldTableName newTableName =
+        printfn $"Migrating table: {oldTableName} -> {newTableName}"
+        
     /// Миграция всех таблиц
     let tryMigrateEagerAsync
         sourceProvider
@@ -13,23 +23,28 @@ module TableMigrator =
             
         let tables = flowData.Tables
         let targetSchema = flowData.TargetSchema
-        let tableMappings = flowData.TableMappings
+        let tablesMappingsSet = createTablesMap flowData.TableMappings
         let typeMappings = flowData.TypeMappings 
         let removeNullBytes = flowData.RemoveNullBytes
             
         let tryMigrateTableAsync tableName =
              async {
                 try
-                    printfn $"Migrating table: %s{tableName}"
+                    let newTableName =
+                        match tablesMappingsSet.TryFind tableName with
+                        | Some n -> n.New
+                        | None -> tableName
+                    
+                    printProcess tableName newTableName
 
-                    let! recordsResult = sourceProvider.tryReadTable tableName typeMappings
+                    let! recordsResult = sourceProvider.tryReadTable newTableName typeMappings
                     
                     let records =
                         match recordsResult with
                         | Ok r -> r
                         | Error e -> failwith e
 
-                    let! result = pgSession.tryWriteRecords records targetSchema tableName tableMappings removeNullBytes
+                    let! result = pgSession.tryWriteRecords records targetSchema tableName removeNullBytes
 
                     return
                         match result with
@@ -59,16 +74,22 @@ module TableMigrator =
         batchSize=
         let { Tables=tables
               TargetSchema=targetSchema
-              TableMappings=tableMappings
               TablesInfo=tablesInfo
               TypeMappings=typeMappings 
               RemoveNullBytes=removeNullBytes
               } = flowData
+        
+        let tablesMappingsSet = createTablesMap flowData.TableMappings
             
         let tryMigrateTableAsync tableName =
              async {
                 try
-                    printfn $"Migrating table: %s{tableName}"
+                    let newTableName =
+                        match tablesMappingsSet.TryFind tableName with
+                        | Some n -> n.New
+                        | None -> tableName
+                    
+                    printProcess tableName newTableName
                     
                     let tableInfo =
                         tablesInfo
@@ -88,7 +109,7 @@ module TableMigrator =
                                     return Ok ()
                                 else
                                     let! result =
-                                        pgSession.tryWriteRecords records targetSchema tableName tableMappings removeNullBytes
+                                        pgSession.tryWriteRecords records targetSchema newTableName removeNullBytes
                                     
                                     match result with
                                     | Error e -> return Error e

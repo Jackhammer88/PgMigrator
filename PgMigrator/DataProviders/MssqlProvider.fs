@@ -83,8 +83,8 @@ ORDER BY
                 let! columns = connection.QueryAsync<ColumnInfo>(query) |> Async.AwaitTask
                 return columns.AsList() |> List.ofSeq |> processDbTablesInfo |> Result.Ok
             with ex ->
-                GlobalLogger.instance.logError "" ex
-                return Error ex.Message
+                GlobalLogger.instance.logError "Failed to retrieve database structure." ex
+                return Error $"Failed to retrieve database structure. {ex.Message}"
         }
 
     let private mapNameToPgType columnNumber columnName typeName typeMappings =
@@ -137,8 +137,8 @@ ORDER BY
                               yield columnNames
                                     |> List.map (fun (n, _, _, t) -> sourceReader.GetValue(n), t) ] }
         with ex ->
-            GlobalLogger.instance.logError "" ex
-            return Error ex.Message
+            GlobalLogger.instance.logError "Failed to read data from the source database." ex
+            return Error $"Failed to read data from the source database. {ex.Message}"
     }
     
     let tryReadTablePartAsync
@@ -195,6 +195,6 @@ ORDER BY
                           destroy = connection.Dispose
                           }
             with ex ->
-                GlobalLogger.instance.logError "" ex
-                return Error ex.Message
+                GlobalLogger.instance.logError "Failed to establish a connection to the source database." ex
+                return Error $"Failed to establish a connection to the source database. {ex.Message}"
         }

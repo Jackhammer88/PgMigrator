@@ -8,7 +8,7 @@ open PgMigrator.DataProviders
 
 type PgSession = {
     tryRunQuery : string -> Async<Result<unit,string>>
-    tryWriteRecords : SourceTableData -> string -> string -> TableMapping list -> bool -> Async<Result<unit,string>>
+    tryWriteRecords : SourceTableData -> string -> string -> bool -> Async<Result<unit,string>>
     destroy : unit -> unit
     tryFinish : unit -> Async<Result<unit,string>>
 } with interface IDisposable with
@@ -23,19 +23,10 @@ module PgSessionFactory =
         (records : SourceTableData)
         schema
         tableName
-        (tableMappings : TableMapping list)
         removeNullBytes
         = async {
-            try
-                let tableMappingsSet =
-                    tableMappings
-                    |> List.map (fun mapping -> mapping.Old, mapping) // Создаем пары (Old, TableMapping)
-                    |> Map.ofList
-                    
-                let targetTableName =
-                    match tableMappingsSet.TryGetValue tableName with
-                    | s, m when s -> $"{schema}.{m.New}"
-                    | _ -> $"{schema}.{tableName}"
+            try                    
+                let targetTableName = $"{schema}.{tableName}"
                     
                 use! writer =
                     connection.BeginBinaryImportAsync(
@@ -67,9 +58,9 @@ module PgSessionFactory =
                 return Ok ()
             with
             | ex ->
-                GlobalLogger.instance.logError "Failed to write records" ex
+                GlobalLogger.instance.logError $"Failed to write records to table '{schema}.{tableName}'." ex
                 do! transaction.RollbackAsync() |> Async.AwaitTask
-                return Error ex.Message
+                return Error $"Failed to write records to table '{schema}.{tableName}': {ex.Message}"
         }
         
     let private tryRunQuery (connection: NpgsqlConnection) query =
@@ -80,8 +71,8 @@ module PgSessionFactory =
                 let! _ = command.ExecuteNonQueryAsync() |> Async.AwaitTask
                 return Ok()
             with ex ->
-                GlobalLogger.instance.logError "" ex
-                return Error ex.Message
+                GlobalLogger.instance.logError "Query execution failed." ex
+                return Error $"Query execution failed. {ex.Message}"
         }
         
     let tryFinish (transaction : NpgsqlTransaction) = async {
@@ -90,8 +81,8 @@ module PgSessionFactory =
             return Ok ()
         with
         | ex ->
-            GlobalLogger.instance.logError "" ex
-            return Error ex.Message
+            GlobalLogger.instance.logError "Failed to commit transaction." ex
+            return Error $"Failed to commit transaction. {ex.Message}"
     }
     
     let tryCreateAsync cs = async {
@@ -114,6 +105,6 @@ module PgSessionFactory =
             }
         with
         | ex ->
-            GlobalLogger.instance.logError "" ex
-            return Error ex.Message
+            GlobalLogger.instance.logError "Failed to establish a connection to the target database." ex
+            return Error $"Failed to establish a connection to the target database. {ex.Message}"
     }
