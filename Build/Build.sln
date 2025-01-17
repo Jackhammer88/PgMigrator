@@ -5,6 +5,11 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Build", "Build.fsproj", "{635F3196-D0DA-4A10-8E41-28133AF3C4EB}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "SolutionItems", "SolutionItems", "{4FF1B2E9-9E0A-436A-B122-E9FF4929C9FA}"
+	ProjectSection(SolutionItems) = preProject
+		..\.github\workflows\fake-build.yml = ..\.github\workflows\fake-build.yml
+	EndProjectSection
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
