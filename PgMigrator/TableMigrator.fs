@@ -1,7 +1,7 @@
 namespace PgMigrator
 
 open PgMigrator.Config
-open PgMigrator.DataProviders
+open PgMigrator.SourceProviders
 open PgMigrator.Types
 
 module TableMigrator =

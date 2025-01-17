@@ -1,4 +1,4 @@
-namespace PgMigrator.DataProviders
+namespace PgMigrator.SourceProviders
 
 open System
 open NpgsqlTypes

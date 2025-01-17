@@ -2,7 +2,7 @@ module TableMigratorTests
 
 open PgMigrator
 open PgMigrator.Config
-open PgMigrator.DataProviders
+open PgMigrator.SourceProviders
 open PgMigrator.Types
 open Xunit
 

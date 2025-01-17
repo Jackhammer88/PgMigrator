@@ -4,7 +4,7 @@ open System
 open Npgsql
 open NpgsqlTypes
 open PgMigrator
-open PgMigrator.DataProviders
+open PgMigrator.SourceProviders
 
 type PgSession = {
     tryRunQuery : string -> Async<Result<unit,string>>

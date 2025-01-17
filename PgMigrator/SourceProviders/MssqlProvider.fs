@@ -1,4 +1,4 @@
-namespace PgMigrator.DataProviders
+namespace PgMigrator.SourceProviders
 
 open System.Data
 open Microsoft.Data.SqlClient

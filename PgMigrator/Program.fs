@@ -4,7 +4,7 @@ open System
 open System.Diagnostics
 open Microsoft.FSharp.Core
 open PgMigrator.Config
-open PgMigrator.DataProviders
+open PgMigrator.SourceProviders
 open PgMigrator.Mapping
 open FsToolkit.ErrorHandling
 open PgMigrator.Types
